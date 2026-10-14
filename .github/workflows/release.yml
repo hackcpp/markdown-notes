@@ -9,8 +9,35 @@ permissions:
   contents: write
 
 jobs:
+  # 提前拦住一类"CI 报成功、但产物是错的"的情况：
+  # 若标签是 v0.2.0 而 package.json 里 version 还是 0.1.0，
+  # electron-builder 会用 package.json 的版本命名文件，于是 Release 上挂着
+  # v0.2.0 的标题、里面却是 `…-0.1.0-setup.exe` —— 而流水线一路绿灯。
+  # 注意：这里不用 `if` 卡整个 job。job 被跳过会导致 needs 它的下游 job 一并被跳过
+  # （GitHub Actions 的已知行为），那样 workflow_dispatch 手动验证的路径就废了。
+  # 所以让 job 始终运行、只把"检查"这一步条件化。
+  guard:
+    name: 版本一致性校验
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 校验标签与 package.json 版本一致
+        if: github.ref_type == 'tag'
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(node -p "require('./package.json').version")"
+          echo "标签版本 = ${tag}"
+          echo "package.json 版本 = ${pkg}"
+          if [ "${tag}" != "${pkg}" ]; then
+            echo "::error::标签 ${GITHUB_REF_NAME} 与 package.json 的 version（${pkg}）不一致。请先把 package.json 的 version 改为 ${tag} 并提交，再打标签，否则产出的安装包文件名会带错版本号。"
+            exit 1
+          fi
+
   package:
     name: 打包 (${{ matrix.label }})
+    needs: guard
     strategy:
       fail-fast: false
       matrix:
