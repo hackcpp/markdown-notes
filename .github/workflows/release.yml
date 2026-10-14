@@ -52,10 +52,21 @@ jobs:
         run: npm test
 
       - name: 打包
-        run: ${{ matrix.command }}
+        shell: bash
+        # 必须用 bash 且显式 unset：GitHub Actions 对未定义的 secret 会注入**空字符串**，
+        # 而 electron-builder 的 getCscLink() 只判 null 不判空（macPackager.js:26），
+        # "" 会被 resolveCscLinkPath("", projectDir) 解析成项目目录本身，
+        # 抛 `…/markdown-notes not a file`（macOS 必挂；Windows 走 isEmptyOrSpaces 判断，所以不受影响）。
+        run: |
+          if [ -n "$CSC_LINK" ]; then
+            export CSC_IDENTITY_AUTO_DISCOVERY=true
+          else
+            unset CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
+            # 无证书时关闭签名身份探测，省掉无谓的钥匙串搜索与告警噪音
+            export CSC_IDENTITY_AUTO_DISCOVERY=false
+          fi
+          ${{ matrix.command }}
         env:
-          # 未配置证书时关闭签名身份自动探测，省掉无谓的钥匙串搜索与告警噪音。
-          CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.CSC_LINK != '' }}
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           # macOS 公证（未配置时会跳过，产物为未签名 dmg）
@@ -88,9 +99,19 @@ jobs:
       - name: 创建 Release 并附带安装包
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        # 做成幂等的：重跑同一次失败的工作流时，Release 可能已存在，
+        # 此时改为覆盖上传产物，而不是让 `gh release create` 报 "already exists"。
         run: |
-          gh release create "${GITHUB_REF_NAME}" \
-            --repo "${GITHUB_REPOSITORY}" \
-            --title "${GITHUB_REF_NAME}" \
-            --generate-notes \
-            artifacts/*
+          if gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release upload "${GITHUB_REF_NAME}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --clobber \
+              artifacts/*
+          else
+            gh release create "${GITHUB_REF_NAME}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --title "${GITHUB_REF_NAME}" \
+              --generate-notes \
+              artifacts/*
+          fi
