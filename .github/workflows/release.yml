@@ -1,0 +1,104 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    name: 打包 (${{ matrix.label }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            label: Windows
+            command: npm run dist:win
+            artifact: installers-windows
+          - os: macos-latest
+            label: macOS
+            command: npm run dist:mac
+            artifact: installers-macos
+          - os: ubuntu-latest
+            label: Linux
+            # 这里是 AppImage 而不是 dist:linux，因为 deb 目标要求包元数据：
+            # electron-builder 的 FpmTarget 会硬校验 homepage/repository 与 author.email，
+            # 当前 package.json 三者都没填，跑 deb 会直接报错退出。
+            # 补齐元数据后，把下面一行换成 `npm run dist:linux` 即可同时产出 AppImage + deb。
+            command: npm run dist:linux:appimage
+            artifact: installers-linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+          key: electron-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            electron-${{ runner.os }}-
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 单元测试
+        run: npm test
+
+      - name: 打包
+        run: ${{ matrix.command }}
+        env:
+          # 未配置证书时关闭签名身份自动探测，省掉无谓的钥匙串搜索与告警噪音。
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.CSC_LINK != '' }}
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          # macOS 公证（未配置时会跳过，产物为未签名 dmg）
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          if-no-files-found: error
+          path: |
+            release/*.exe
+            release/*.dmg
+            release/*.AppImage
+            release/*.deb
+
+  publish:
+    name: 发布到 GitHub Release
+    needs: package
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: 创建 Release 并附带安装包
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes \
+            artifacts/*

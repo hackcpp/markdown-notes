@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: 校验 (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      # 三平台都跑：这个项目有真实的跨平台差异（见 README），只在 Linux 上跑会漏掉。
+      # 若想省额度，把这里改成 [ubuntu-latest] 即可。
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # Electron 二进制与 electron-builder 工具链不在 npm 缓存里，单独缓存，
+      # 否则每次都会重新下载约 100MB。
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+          key: electron-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            electron-${{ runner.os }}-
+
+      # 不要加 --os / --cpu / --ignore-scripts：lockfile 已包含全部平台的可选依赖，
+      # 原生平台直接 npm ci 即可。
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 类型检查
+        run: npm run typecheck
+
+      - name: 单元测试
+        run: npm test
+
+      - name: 构建（含类型检查，作为兜底）
+        run: npm run build

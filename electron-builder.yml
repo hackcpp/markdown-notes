@@ -1,0 +1,41 @@
+appId: com.markdownnotes.app
+productName: Markdown Notes
+copyright: Copyright © 2026
+
+directories:
+  buildResources: build
+  output: release
+
+files:
+  - out/**
+  - package.json
+  - '!**/*.map'
+  - '!**/{.eslintrc,.editorconfig,tsconfig*.json,vitest.config.ts}'
+
+# 用户笔记永远不在安装目录内，升级/卸载不会触碰
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Markdown Notes
+  deleteAppDataOnUninstall: false
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  artifactName: ${productName}-${version}-setup.${ext}
+
+mac:
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+  category: public.app-category.productivity
+  artifactName: ${productName}-${version}-${arch}.${ext}
+
+linux:
+  target: [AppImage, deb]
+  category: Office
+  artifactName: ${productName}-${version}-${arch}.${ext}

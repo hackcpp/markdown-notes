@@ -1,0 +1,18 @@
+# 统一换行符：源码与配置文件一律 LF，避免 Windows 上编辑后产生 CRLF 噪音提交。
+* text=auto eol=lf
+
+# 以下类型必须保持二进制，禁止做换行符转换
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.icns binary
+*.exe binary
+*.dll binary
+*.node binary
+*.7z binary
+*.zip binary
+
+# lockfile 不参与 diff 折叠，保持原样
+package-lock.json -diff linguist-generated

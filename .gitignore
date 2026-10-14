@@ -1,0 +1,19 @@
+node_modules/
+out/
+dist/
+release/
+.vite/
+*.log
+.DS_Store
+Thumbs.db
+.env
+.env.local
+
+# 本地验证产物
+ui-shot.png
+
+# 智能体工作记忆（本地笔记，非项目源码；如需随仓库同步可删除本行）
+.workbuddy/
+
+# 误用 Windows 保留设备名的残留文件（POSIX shell 里写 2>NUL 会真的建出一个叫 NUL 的文件）
+NUL
