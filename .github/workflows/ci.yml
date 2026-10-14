@@ -15,10 +15,10 @@ jobs:
     name: 校验 (${{ matrix.os }})
     strategy:
       fail-fast: false
-      # 三平台都跑：这个项目有真实的跨平台差异（见 README），只在 Linux 上跑会漏掉。
-      # 若想省额度，把这里改成 [ubuntu-latest] 即可。
+      # 只跑 Windows + macOS —— 这两个是实际要发布的平台，且二者存在真实差异
+      # （符号链接 / realpath、fsevents、换行风格），只在单平台上跑会漏掉。
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
